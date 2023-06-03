@@ -1,0 +1,30 @@
+#!/bin/bash
+
+declare -A RPARAMS
+for par in $(echo $RQUERY | tr '&' ' '); do
+    RPARAMS[$(echo $par | cut -d '=' -f 1)]=$(echo $par | cut -d '=' -f 2)
+done
+
+PARAMS="<ul>"
+for par in ${!RPARAMS[@]}; do
+    PARAMS="$PARAMS<li>$par -> ${RPARAMS[$par]}</li>"
+done
+PARAMS="$PARAMS</ul>"
+
+cat << EOF
+<!DOCTYPE HTML>
+<html>
+ADDRESS=$RADDRESS
+<br>
+PORT=$RPORT
+<br>
+METHOD=$RMETHOD
+<br>
+URL=$RURL
+<br>
+PATH=$RPATH
+<br>
+QUERY=$RQUERY
+<br>
+PARAMS=$PARAMS
+EOF

@@ -1,17 +1,15 @@
 #!/bin/bash
 
 PORT=10000
-STATIC="./static"
-TEMPLATES="./templates"
 LOG=true
-
-PROXYREGEX='\/proxy\/(.+)'
-TEMPLATEREGEX='\/temp\/(.+)'
+ROUTES='./routes'
 
 CONNREGEX='Connection received on (.+)\s(.+)'
 HEADREGEX='(GET|HEAD|POST|PUT|DELETE|CONNECT|OPTIONS|TRACE)\s(.*?)\sHTTP.*?'
 PATHREGEX='(\/[^?]*)\??.*'
 QUERYREGX='.*\?(.*)'
+
+ROUTINGREGEX="location '(\\\/.*)' \{ (.+) \}"
 
 rm -f responseFIFO
 mkfifo responseFIFO
@@ -47,37 +45,26 @@ function handleRequest() {
         fi
     done
 
-    # routing
-    if [[ $RPATH =~ $PROXYREGEX ]]; then
-        # proxy
-        proxyurl=$(echo $RPATH | sed -E "s/$PROXYREGEX/\1/")
-        response="$(curl -L $proxyurl 2>/dev/null)"
-        code=200
-    elif [[ $RPATH =~ $TEMPLATEREGEX ]]; then
-        # templates
-        templatepath="$TEMPLATES/$(echo $RPATH | sed -E "s/$TEMPLATEREGEX/\1/").template"
-        if [[ -f $templatepath ]]; then
-            response="$($templatepath $RADDRESS $RPORT $RMETHOD $RURL $RPATH $RQUERY)"
-            code=200
-        else
-            response="<!DOCTYPE html><html><h1>File not found.</h1>$RPATH</html>"
-            code=404
-        fi
-    else
-        # serve file
-        if [[ -f $STATIC/$RPATH ]]; then 
-            response="$(cat $STATIC/$RPATH 2>/dev/null)"
-            code=200
-        elif [[ -f "$STATIC/${RPATH}index.html" ]]; then
-            response="$(cat "$STATIC/${RPATH}index.html" 2>/dev/null)"
-            code=200
-        else
-            response="<!DOCTYPE html><html><h1>File not found.</h1>$RPATH</html>"
-            code=404
-        fi      
-    fi
+    export RADDRESS=$RADDRESS
+    export RPORT=$RPORT
+    export RMETHOD=$RMETHOD
+    export RURL=$RURL
+    export RPATH=$RPATH
+    export RQUERY=$RQUERY
 
-    [[ $LOG = true ]] && echo "$RADDRESS - [$(date '+%Y/%b/%d %H:%M:%S')] $RMETHOD $RPATH $code"
+    # routing
+    rm -f codeFIFO
+    while IFS= read -r line; do
+        regex=$(echo $line | sed -E "s#$ROUTINGREGEX#\1#")
+        func=$(echo $line | sed -E "s#$ROUTINGREGEX#\2#")
+        if [[ $RPATH =~ $regex ]]; then
+            response=$($ROUTES/$func.sh)
+            code=$?
+            break
+        fi
+    done < "default.routes"
+
+    [[ $LOG = true ]] && echo "$RADDRESS - [$(date '+%Y/%m/%d %H:%M:%S')] $func: $RMETHOD $RPATH $code"
     echo -e "HTTP/1.1 $code\r\n\r\n$response" >> responseFIFO
 }
 
