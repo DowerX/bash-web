@@ -3,5 +3,5 @@
 PROXYREGEX='\/proxy\/(.+)'
 
 proxyurl=$(echo $RPATH | sed -E "s/$PROXYREGEX/\1/")
-echo "$(curl -L $proxyurl 2>/dev/null)"
-exit 200
+echo -e "200 OK\r\n$SHEADERS\r\n" >> response
+wget -O - $proxyurl 2>/dev/null >> response
